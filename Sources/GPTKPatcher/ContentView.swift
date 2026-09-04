@@ -30,7 +30,7 @@ struct ContentView: View {
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: engine.phase)
         }
         .padding(.horizontal, 30)
-        .padding(.top, 38)
+        .padding(.top, 26)
         .padding(.bottom, 26)
         .frame(width: width)
         .fixedSize(horizontal: false, vertical: true)
@@ -74,7 +74,7 @@ struct ContentView: View {
         .controlSize(.regular)
         .labelsHidden()
         .frame(width: 280)
-        .help("Duplicate CrossOver and patch the duplicate, or patch the selected CrossOver directly")
+        .help("Duplicate CrossOver and patch the duplicate")
     }
 
     // MARK: Idle form
@@ -410,10 +410,14 @@ private struct WindowConfigurator: NSViewRepresentable {
 /// Environment-variable hooks for screenshots and testing. They do nothing unless set.
 ///   GPTKPATCHER_CROSSOVER=<path>  GPTKPATCHER_DMG=<path>  GPTKPATCHER_OUTPUT=<folder>
 ///   GPTKPATCHER_PASTE=1  GPTKPATCHER_AUTOPATCH=1  GPTKPATCHER_OPEN_SETTINGS=1  GPTKPATCHER_SKIP_NOTICE=1
+///   GPTKPATCHER_APPEARANCE=light|dark
 enum DebugHooks {
     @MainActor
     static func apply(to engine: PatchEngine) {
         let env = ProcessInfo.processInfo.environment
+        if let appearance = env["GPTKPATCHER_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua)
+        }
         if let path = env["GPTKPATCHER_CROSSOVER"] { engine.setCrossOver(URL(fileURLWithPath: path)) }
         if env["GPTKPATCHER_PASTE"] == "1" { engine.pasteFromPasteboard() }
         if let path = env["GPTKPATCHER_OUTPUT"] { engine.useTemporaryOutputFolder(URL(fileURLWithPath: path)) }

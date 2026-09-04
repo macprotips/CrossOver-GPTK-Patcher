@@ -1,12 +1,12 @@
 import SwiftUI
 import AppKit
 
-/// Draws the app icon: a dark squircle with an arrow coming down into a line, for "put this into
-/// that app". Rendered on Apple's 1024pt icon grid, where the shape occupies the middle 824pt.
+/// Draws the app icon: the letters GPTK over a download arrow, for "get the toolkit in".
+/// Rendered on Apple's 1024pt icon grid, where the shape occupies the middle 824pt.
 private struct IconView: View {
     private let canvas: CGFloat = 1024
     private let plate: CGFloat = 824
-    private let stroke: CGFloat = 46
+    private let stroke: CGFloat = 42
 
     var body: some View {
         ZStack {
@@ -14,37 +14,36 @@ private struct IconView: View {
                 .fill(Color(red: 0.13, green: 0.13, blue: 0.145))
                 .frame(width: plate, height: plate)
 
-            glyph
+            VStack(spacing: 40) {
+                Text("GPTK")
+                    .font(.system(size: 236, weight: .bold, design: .rounded))
+                    .kerning(-8)
+                    .foregroundStyle(.white)
+                arrow
+            }
+            .offset(y: -6)
         }
         .frame(width: canvas, height: canvas)
     }
 
-    /// Path coordinates run from the top-left of the canvas, so the glyph is laid out around
-    /// the middle by hand.
-    private func c(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-        CGPoint(x: canvas / 2 + x, y: canvas / 2 + y)
-    }
-
-    private var glyph: some View {
-        ZStack {
-            // Shaft and arrowhead, drawn as one stroked path so the join stays clean.
+    /// Shaft and head in one stroked path, with the line it lands on beneath.
+    private var arrow: some View {
+        VStack(spacing: 30) {
             Path { p in
-                p.move(to: c(0, -200))
-                p.addLine(to: c(0, 62))
-                p.move(to: c(-104, -34))
-                p.addLine(to: c(0, 70))
-                p.addLine(to: c(104, -34))
+                p.move(to: CGPoint(x: 105, y: 0))
+                p.addLine(to: CGPoint(x: 105, y: 150))
+                p.move(to: CGPoint(x: 20, y: 74))
+                p.addLine(to: CGPoint(x: 105, y: 159))
+                p.addLine(to: CGPoint(x: 190, y: 74))
             }
             .stroke(style: StrokeStyle(lineWidth: stroke, lineCap: .round, lineJoin: .round))
             .foregroundStyle(.white)
+            .frame(width: 210, height: 180)
 
-            // The line it lands on.
             Capsule()
                 .fill(.white)
-                .frame(width: 360, height: stroke)
-                .offset(y: 176)
+                .frame(width: 300, height: stroke)
         }
-        .frame(width: canvas, height: canvas)
     }
 }
 
