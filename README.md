@@ -3,6 +3,13 @@
 A small macOS utility that puts Apple's Game Porting Toolkit (GPTK) into CrossOver, either as a
 patched duplicate or by patching the installed app, and sets up DLSS → MetalFX.
 
+## Requirements
+
+- macOS 14 or later, on an Apple Silicon Mac.
+- CrossOver 25, 26, or CrossOver Preview 27.
+- A Game Porting Toolkit disk image, downloaded from Apple's developer downloads with a free
+  Apple ID. Nothing from Apple's toolkit is redistributed here; you supply your own copy.
+
 ## Using it
 
 1. Drop `CrossOver.app` and the toolkit `.dmg` onto the two tiles. Either tile takes either file,
@@ -83,7 +90,7 @@ The SwiftUI macros need a full Xcode toolchain; the script borrows `/Application
 automatically when `xcode-select` points at the bare Command Line Tools. Opening `Package.swift`
 in Xcode also works. That bundle is signed ad hoc. `scripts/release.sh` builds a Developer
 ID-signed, notarized and stapled copy and zips it into `dist/`; it needs a notarytool keychain
-profile named `notary` (the script's header shows the one-time setup). The app has no custom icon yet.
+profile named `notary` (the script's header shows the one-time setup).
 
 Headless mode, for scripting and tests:
 
