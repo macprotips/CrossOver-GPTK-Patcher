@@ -13,7 +13,7 @@ scripts/build-app.sh
 APP="build/CrossOver GPTK Patcher.app"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 
-echo "Signing with $IDENTITY…"
+echo "Signing with ${IDENTITY}..."
 codesign --force --options runtime --timestamp --sign "$IDENTITY" "$APP"
 codesign --verify --strict --verbose=2 "$APP"
 
@@ -23,10 +23,10 @@ trap 'rm -rf "$WORK"' EXIT
 UPLOAD="$WORK/upload.zip"
 ditto -c -k --keepParent "$APP" "$UPLOAD"
 
-echo "Submitting to Apple for notarization…"
+echo "Submitting to Apple for notarization..."
 xcrun notarytool submit "$UPLOAD" --keychain-profile "$PROFILE" --wait
 
-echo "Stapling…"
+echo "Stapling..."
 xcrun stapler staple "$APP"
 xcrun stapler validate "$APP"
 spctl --assess --type execute --verbose=2 "$APP"
