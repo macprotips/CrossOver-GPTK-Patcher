@@ -14,6 +14,9 @@ struct CrossOverBundle: Sendable {
         let fm = FileManager.default
         // Work on the real bundle: through an alias or symlink, a "copy" would be a link to the original.
         let url = url.resolvingSymlinksInPath()
+        guard fm.fileExists(atPath: url.path) else {
+            throw PatchError.io("“\(url.lastPathComponent)” could not be found. It may have been moved, renamed or deleted.")
+        }
         guard url.pathExtension == "app", fm.isDirectory(url) else {
             throw PatchError.notCrossOver("expected an .app bundle")
         }

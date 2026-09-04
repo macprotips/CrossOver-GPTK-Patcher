@@ -13,9 +13,9 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.bottom, 14)
-            if case .idle = engine.phase { modePicker.padding(.bottom, 20) }
-            else if case .cancelled = engine.phase { modePicker.padding(.bottom, 20) }
+                .padding(.bottom, 22)
+            if case .idle = engine.phase { modePicker.padding(.bottom, 28) }
+            else if case .cancelled = engine.phase { modePicker.padding(.bottom, 28) }
             else { Color.clear.frame(height: 0).padding(.bottom, 12) }
 
             Group {
@@ -29,9 +29,9 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .top)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: engine.phase)
         }
-        .padding(.horizontal, 28)
-        .padding(.top, 18)
-        .padding(.bottom, 22)
+        .padding(.horizontal, 30)
+        .padding(.top, 38)
+        .padding(.bottom, 26)
         .frame(width: width)
         .fixedSize(horizontal: false, vertical: true)
         .background(WindowConfigurator())
@@ -55,7 +55,7 @@ struct ContentView: View {
     // MARK: Header
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("CrossOver GPTK Patcher")
                 .font(.title2.weight(.semibold))
             Text(engine.mode == .copy ? "Create a patched copy of CrossOver with GPTK." : "Patch your existing CrossOver with GPTK.")
@@ -89,26 +89,34 @@ struct ContentView: View {
                 ToolkitTile(engine: engine)
             }
 
-            Divider().padding(.vertical, 18)
-
             if engine.mode == .copy {
-                outputRow
+                destinationRow.padding(.top, 24)
             }
 
-            if !engine.patchedApps.isEmpty {
-                patchedSection.padding(.top, engine.mode == .copy ? 16 : 0)
+            if showsOutputSection {
+                if engine.mode == .copy { Divider().padding(.vertical, 18) }
+                outputSection.padding(.top, engine.mode == .copy ? 0 : 24)
             }
 
-            actionBar.padding(.top, 20)
+            actionBar.padding(.top, 18)
         }
     }
 
-    private var patchedSection: some View {
+    /// True once there is either a result to preview or an app that has already been patched.
+    private var showsPlannedOutput: Bool {
+        engine.mode == .copy && engine.crossOver != nil && engine.selectedToolkit != nil
+    }
+    private var showsOutputSection: Bool { showsPlannedOutput || !engine.patchedApps.isEmpty }
+
+    private var outputSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionLabel("Patched")
+            SectionLabel(showsPlannedOutput ? "Output" : "Patched")
             VStack(spacing: 0) {
+                if showsPlannedOutput {
+                    PlannedOutputRow(name: engine.outputName, sourceIcon: engine.crossOverURL)
+                }
                 ForEach(Array(engine.patchedApps.enumerated()), id: \.element.id) { index, app in
-                    if index > 0 { Divider().padding(.leading, 14) }
+                    if index > 0 || showsPlannedOutput { Divider().padding(.leading, 14) }
                     PatchedAppRow(app: app, autoOpenSettings: index == 0 && ProcessInfo.processInfo.environment["GPTKPATCHER_OPEN_SETTINGS"] == "1", onForget: {
                         PatchedAppRegistry.forget(app.url)
                         engine.refreshPatchedApps()
@@ -119,16 +127,16 @@ struct ContentView: View {
         }
     }
 
-    private var outputRow: some View {
+    private var destinationRow: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionLabel("Save patched copy to")
             HStack(spacing: 10) {
                 Image(systemName: "folder")
                     .foregroundStyle(.secondary)
-                Text(engine.outputURL.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                Text(destinationText)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(engine.outputURL.path)
+                    .help(destinationText)
                 Spacer(minLength: 8)
                 Button("Change…", action: chooseFolder)
                     .controlSize(.small)
@@ -138,16 +146,19 @@ struct ContentView: View {
             .frame(height: 38)
             .modifier(InputTileChrome(targeted: false, isEmpty: false, isError: false, cornerRadius: 10))
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Save patched copy to \(engine.outputURL.path)")
+            .accessibilityLabel("Save patched copy to \(destinationText)")
         }
+    }
+
+    /// The folder alone until both inputs are chosen; the full path once the name is real.
+    private var destinationText: String {
+        let url = showsPlannedOutput ? engine.outputURL : engine.outputFolder
+        return url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
     }
 
     private var actionBar: some View {
         HStack(spacing: 12) {
-            Button("What changes?") { showWhatChanges.toggle() }
-                .buttonStyle(.link)
-                .font(.callout)
-                .popover(isPresented: $showWhatChanges, arrowEdge: .top) { WhatChangesPopover(mode: engine.mode) }
+            whatChangesLink
             if case .cancelled = engine.phase {
                 Text("Patch cancelled. Nothing was changed.")
                     .font(.callout)
@@ -159,6 +170,21 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(!engine.isReady)
         }
+    }
+
+    private var whatChangesLink: some View {
+        Button {
+            showWhatChanges.toggle()
+        } label: {
+            HStack(spacing: 3) {
+                Text("What changes?")
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+        }
+        .buttonStyle(.link)
+        .font(.callout)
+        .popover(isPresented: $showWhatChanges, arrowEdge: .top) { WhatChangesPopover(mode: engine.mode) }
     }
 
     // MARK: Running
@@ -381,7 +407,6 @@ private struct WindowConfigurator: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
-
 /// Environment-variable hooks for screenshots and testing. They do nothing unless set.
 ///   GPTKPATCHER_CROSSOVER=<path>  GPTKPATCHER_DMG=<path>  GPTKPATCHER_OUTPUT=<folder>
 ///   GPTKPATCHER_PASTE=1  GPTKPATCHER_AUTOPATCH=1  GPTKPATCHER_OPEN_SETTINGS=1  GPTKPATCHER_SKIP_NOTICE=1
@@ -471,12 +496,9 @@ private struct PatchedAppRow: View {
             Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([app.url]) }
                 .controlSize(.small)
             Button { showSettings.toggle() } label: {
-                Image(systemName: "gearshape").font(.system(size: 13, weight: .medium))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Rectangle())
+                Image(systemName: "gearshape")
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .controlSize(.small)
             .help("Options: frame rate cap and Metal HUD")
             .accessibilityLabel("Options for \(app.name)")
             .popover(isPresented: $showSettings, arrowEdge: .bottom) { PatchedAppSettings(app: app) }
@@ -520,5 +542,37 @@ private struct PasteCatcher: NSViewRepresentable {
             }
             return super.responds(to: aSelector)
         }
+    }
+}
+
+/// The result a patch will produce, shown before it runs so the outcome is never implied to exist.
+private struct PlannedOutputRow: View {
+    let name: String
+    let sourceIcon: URL?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: sourceIcon?.path ?? "/Applications"))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 32, height: 32)
+                .opacity(0.5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(name.hasSuffix(".app") ? String(name.dropLast(4)) : name)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("Will be created when you patch")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 8)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Output: \(name), will be created when you patch")
     }
 }

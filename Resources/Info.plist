@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>CrossOver GPTK Patcher</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -32,10 +34,10 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleDisplayName</key>
-	<string>CrossOver GPTK Patcher</string>
 	<key>CFBundleExecutable</key>
 	<string>GPTKPatcher</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.macprotips.CrossOverGPTKPatcher</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -45,9 +47,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.1</string>
+	<string>1.0.2</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>

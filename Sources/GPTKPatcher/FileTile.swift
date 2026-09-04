@@ -77,8 +77,8 @@ struct FileTile: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(url?.lastPathComponent ?? "")
                     .font(.body.weight(.medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let detail {
                     Text(detail.text)
                         .font(.caption)
@@ -190,8 +190,9 @@ struct InputTileChrome: ViewModifier {
 
     private var fill: AnyShapeStyle {
         if targeted { return AnyShapeStyle(Color.accentColor.opacity(0.14)) }
-        if isEmpty { return AnyShapeStyle(.quaternary.opacity(hovering ? 0.8 : 0.5)) }
-        return AnyShapeStyle(Color(nsColor: hovering ? .unemphasizedSelectedContentBackgroundColor : .controlBackgroundColor))
+        if isEmpty { return AnyShapeStyle(.quaternary.opacity(hovering ? 0.62 : 0.5)) }
+        // A faint lift on hover. Anything stronger competes with the checkmark for "selected".
+        return AnyShapeStyle(Color(nsColor: .controlBackgroundColor).opacity(hovering ? 0.75 : 1))
     }
 
     private var borderColor: Color {
