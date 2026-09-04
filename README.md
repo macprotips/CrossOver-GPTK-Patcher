@@ -38,10 +38,12 @@ from a terminal.
   renames the app to `CrossOver (GPTK x).app` afterwards unless that name is taken, and moves it
   into Applications if it was patched somewhere like Downloads. Bottle sessions that app had
   running are ended first, because after the rename they would point at a path that no longer
-  exists and every bottle query would hang.
+  exists and every bottle query would hang. Patching an already patched app again keeps any frame
+  rate cap or HUD setting it has.
 - Replaces the bundled `apple_gptk` folder with the toolkit's, keeping the original as
   `apple_gptk.stock`. A second patch replaces only the previous patch; the stock backup is never
-  overwritten. If any step fails, the folder is put back and an unfinished duplicate is deleted.
+  overwritten. If any step fails, the folder, receipt and config files are put back and an
+  unfinished duplicate is deleted. Quitting the app mid-patch cancels the patch the same way.
 - Creates `nvngx.dll` and `nvngx.so` copies of the toolkit's `nvngx-on-metalfx` shim. CrossOver's
   loader redirects a game's `nvngx.dll` to that file, so without it DLSS games get no MetalFX.
 - Writes `D3DM_ENABLE_METALFX=1` and `DXMT_ENABLE_NVEXT=1` to the app's
@@ -50,8 +52,9 @@ from a terminal.
 - Makes sure the app being patched has been opened once. macOS verifies a downloaded app the first
   time it opens and a patched bundle can't pass that check, so a never-opened download would be
   reported as "damaged" afterwards (re-signing doesn't help). If needed, the patcher opens the app
-  for real, lets it run until it has settled (CrossOver may offer to move itself to Applications;
-  that is fine), quits it, and only then patches it. In Duplicate mode this happens to the
+  for real, quits it as soon as macOS has recorded the approval (CrossOver may offer to move itself
+  to Applications; that is fine), and only then patches it. No other CrossOver may be running at
+  that moment, so that only the instance the patcher opened is quit. In Duplicate mode this happens to the
   unmodified duplicate, so the patched app is always one macOS has approved. The download record
   is then removed from the bundle: while it remains, macOS runs the app from a hidden translocated
   copy and CrossOver offers to move itself to Applications on every launch.
@@ -73,24 +76,26 @@ Config edits keep a `.gptkpatcher.bak` next to the file they changed.
 ## Building
 
 ```bash
-scripts/build-app.sh && open build/GPTKPatcher.app
+scripts/build-app.sh && open "build/CrossOver GPTK Patcher.app"
 ```
 
 The SwiftUI macros need a full Xcode toolchain; the script borrows `/Applications/Xcode*.app`
 automatically when `xcode-select` points at the bare Command Line Tools. Opening `Package.swift`
-in Xcode also works. The bundle is signed ad hoc; distribution outside this Mac needs a Developer
-ID signature and notarization, and the app has no custom icon yet.
+in Xcode also works. That bundle is signed ad hoc. `scripts/release.sh` builds a Developer
+ID-signed, notarized and stapled copy and zips it into `dist/`; it needs a notarytool keychain
+profile named `notary` (the script's header shows the one-time setup). The app has no custom icon yet.
 
 Headless mode, for scripting and tests:
 
 ```bash
-build/GPTKPatcher.app/Contents/MacOS/GPTKPatcher --cli /Applications/CrossOver.app \
+"build/CrossOver GPTK Patcher.app/Contents/MacOS/GPTKPatcher" --cli /Applications/CrossOver.app \
     ~/Downloads/Game_Porting_Toolkit_4.0.dmg "/Applications/CrossOver (GPTK 4.0).app" \
     [--in-place] [--replace] [--fps 60] [--hud] [--no-copy-env] [--bottle Steam]
 ```
 
 The toolkit argument may be a `.dmg` (imported into the library first) or an imported version
-such as `4.0b2`. With `--in-place` the destination argument is omitted.
+such as `4.0b2`. With `--in-place` the destination argument is omitted. `--bottle-status <name>`
+lists what is running in a bottle without touching it; `--quit-bottle <name>` ends it.
 
 Environment variables `GPTKPATCHER_CROSSOVER`, `GPTKPATCHER_DMG`, `GPTKPATCHER_OUTPUT`,
 `GPTKPATCHER_PASTE`, `GPTKPATCHER_AUTOPATCH`, `GPTKPATCHER_OPEN_SETTINGS` and

@@ -7,16 +7,22 @@ import Foundation
 enum CXConfig {
     static let section = "[EnvironmentVariables]"
 
+    /// CrossOver's parser is case-insensitive and lets a later line override an earlier one.
     static func value(of key: String, in conf: URL) -> String? {
         guard let text = try? String(contentsOf: conf, encoding: .utf8) else { return nil }
         var inSection = false
+        var found: String?
         for line in text.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("[") { inSection = trimmed == section; continue }
-            guard inSection, let (k, v) = parseAssignment(trimmed), k == key else { continue }
-            return v
+            if trimmed.hasPrefix("[") { inSection = isSectionHeader(trimmed); continue }
+            guard inSection, let (k, v) = parseAssignment(trimmed), k.caseInsensitiveCompare(key) == .orderedSame else { continue }
+            found = v
         }
-        return nil
+        return found
+    }
+
+    private static func isSectionHeader(_ line: String) -> Bool {
+        line.caseInsensitiveCompare(section) == .orderedSame
     }
 
     /// Sets `"key" = "value"`; a `nil` value removes the key. Creates the section when needed.
@@ -25,10 +31,10 @@ enum CXConfig {
     @discardableResult
     static func set(_ key: String, to value: String?, in conf: URL) throws -> Bool {
         let original = try String(contentsOf: conf, encoding: .utf8)
-        var lines = original.components(separatedBy: "\n")
+        var lines = original.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
 
         let header: Int
-        if let existingHeader = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == section }) {
+        if let existingHeader = lines.firstIndex(where: { isSectionHeader($0.trimmingCharacters(in: .whitespaces)) }) {
             header = existingHeader
         } else {
             guard value != nil else { return false }
@@ -44,21 +50,26 @@ enum CXConfig {
             end = i
             break
         }
-        let existing = ((header + 1)..<end).first { parseAssignment(lines[$0].trimmingCharacters(in: .whitespaces))?.0 == key }
+        // Every line for the key; CrossOver honours the last one, so that is the one kept.
+        let matches = ((header + 1)..<end).filter {
+            parseAssignment(lines[$0].trimmingCharacters(in: .whitespaces))?.0.caseInsensitiveCompare(key) == .orderedSame
+        }
+        let duplicates = matches.dropLast()
 
         if let value {
             let assignment = "\"\(key)\" = \"\(value)\""
-            if let existing {
-                if lines[existing].trimmingCharacters(in: .whitespaces) == assignment { return false }
+            if let existing = matches.last {
+                if lines[existing].trimmingCharacters(in: .whitespaces) == assignment, duplicates.isEmpty { return false }
                 lines[existing] = assignment
             } else {
                 var insertAt = end
                 while insertAt > header + 1, lines[insertAt - 1].trimmingCharacters(in: .whitespaces).isEmpty { insertAt -= 1 }
                 lines.insert(assignment, at: insertAt)
             }
+            for index in duplicates.reversed() { lines.remove(at: index) }
         } else {
-            guard let existing else { return false }
-            lines.remove(at: existing)
+            guard !matches.isEmpty else { return false }
+            for index in matches.reversed() { lines.remove(at: index) }
         }
 
         try backupOnce(conf)
@@ -73,11 +84,17 @@ enum CXConfig {
         }
     }
 
+    /// `"Key" = "Value"`, optionally followed by a `; comment`.
     private static func parseAssignment(_ line: String) -> (String, String)? {
         guard line.hasPrefix("\""), let eq = line.range(of: "=") else { return nil }
         let key = line[..<eq.lowerBound].trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
-        let value = line[eq.upperBound...].trimmingCharacters(in: CharacterSet(charactersIn: "\" "))
-        return key.isEmpty ? nil : (key, value)
+        var rest = line[eq.upperBound...].trimmingCharacters(in: .whitespaces)
+        if rest.hasPrefix("\""), let close = rest.dropFirst().firstIndex(of: "\"") {
+            rest = String(rest[rest.index(after: rest.startIndex)..<close])
+        } else if let comment = rest.firstIndex(of: ";") {
+            rest = rest[..<comment].trimmingCharacters(in: .whitespaces)
+        }
+        return key.isEmpty ? nil : (key, rest)
     }
 }
 
@@ -126,10 +143,10 @@ enum BottleEnv {
             let parts = line.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
             guard parts.count == 2, parts[1].hasSuffix("/wineserver"), let pid = Int32(parts[0]) else { continue }
             guard let env = try? Shell.run("/bin/ps", ["-E", "-p", String(pid), "-o", "command="]),
-                  let range = env.stdout.range(of: #"WINEPREFIX=(.+?)(?= [A-Z0-9_]+=|$)"#, options: .regularExpression) else { continue }
+                  let range = env.stdout.range(of: #"WINEPREFIX=(.+?)(?= [A-Za-z_][A-Za-z0-9_]*=|$)"#, options: .regularExpression) else { continue }
             let prefix = env.stdout[range].dropFirst("WINEPREFIX=".count).trimmingCharacters(in: .whitespacesAndNewlines)
             var cxRoot: String?
-            if let rootRange = env.stdout.range(of: #"CX_ROOT=(.+?)(?= [A-Z0-9_]+=|$)"#, options: .regularExpression) {
+            if let rootRange = env.stdout.range(of: #"CX_ROOT=(.+?)(?= [A-Za-z_][A-Za-z0-9_]*=|$)"#, options: .regularExpression) {
                 cxRoot = env.stdout[rootRange].dropFirst("CX_ROOT=".count).trimmingCharacters(in: .whitespacesAndNewlines)
             }
             found.append(Server(pid: pid, binary: String(parts[1]), prefix: URL(fileURLWithPath: prefix).standardizedFileURL, cxRoot: cxRoot))
@@ -143,9 +160,10 @@ enum BottleEnv {
     private static func clientPIDs(inPrefix prefix: URL) -> [Int32] {
         guard let list = try? Shell.run("/bin/ps", ["-axo", "pid=,comm="]) else { return [] }
         var pids: [Int32] = []
+        let me = getpid()
         for line in list.stdout.split(separator: "\n") {
             let parts = line.trimmingCharacters(in: .whitespaces).split(separator: " ", maxSplits: 1)
-            guard parts.count == 2, let pid = Int32(parts[0]) else { continue }
+            guard parts.count == 2, let pid = Int32(parts[0]), pid != me else { continue }
             let command = parts[1].lowercased()
             if command.hasSuffix(".exe") || (command.contains("wine") && !command.hasSuffix("/wineserver")) { pids.append(pid) }
         }
@@ -199,14 +217,16 @@ enum BottleEnv {
 
     /// Ends everything in the bottle the way CrossOver's own Quit does, then makes sure of it.
     /// The server is asked to stop its clients politely, then hard; whatever survives that (or was
-    /// already orphaned) is ended directly, identified by its working directory inside the bottle.
+    /// already orphaned) is ended directly, identified by the files it holds inside the bottle.
+    /// Process ids are looked up afresh here: the snapshot may be minutes old.
     static func quit(_ running: RunningBottle) throws {
-        if let pid = running.serverPID {
+        if let server = servers().first(where: { $0.prefix == running.prefix }) {
+            let pid = server.pid
             let env = ["WINEPREFIX": running.prefix.path]
-            if let binary = running.wineserver, FileManager.default.isExecutableFile(atPath: binary) {
-                _ = try? Shell.run(binary, ["-k15"], environment: env)
+            if FileManager.default.isExecutableFile(atPath: server.binary) {
+                _ = try? Shell.run(server.binary, ["-k15"], environment: env)
                 if !waitForExit(pid, seconds: 8) {
-                    _ = try? Shell.run(binary, ["-k"], environment: env)
+                    _ = try? Shell.run(server.binary, ["-k"], environment: env)
                     _ = waitForExit(pid, seconds: 4)
                 }
             }
@@ -275,7 +295,7 @@ struct GraphicsSettings: Sendable, Equatable {
     var metalHUD = false
     var storeInCopy = true
 
-    /// key → value; a nil value means "remove". DLSS → MetalFX is always on.
+    /// key → value; a nil value leaves whatever the file already has. DLSS → MetalFX is always on.
     var assignments: [(key: String, value: String?)] {
         [("D3DM_ENABLE_METALFX", "1"),
          ("DXMT_ENABLE_NVEXT", "1"),
@@ -284,20 +304,21 @@ struct GraphicsSettings: Sendable, Equatable {
     }
 
     var summary: String {
-        "DLSS → MetalFX on, " + (fpsCap.map { "cap \($0) fps" } ?? "no frame cap") + (metalHUD ? ", Metal HUD on" : "")
+        "DLSS → MetalFX on" + (fpsCap.map { ", cap \($0) fps" } ?? "") + (metalHUD ? ", Metal HUD on" : "")
     }
 
     /// Human-readable outcome of `apply`.
     func describe(_ changes: [String]) -> String {
-        if !changes.isEmpty { return changes.joined(separator: ", ") }
-        return assignments.allSatisfy { $0.value == nil } ? "nothing to write" : "already set"
+        changes.isEmpty ? "already set" : changes.joined(separator: ", ")
     }
 
-    /// Writes the settings into one config file and reports what changed.
+    /// Writes the settings into one config file and reports what changed. Existing values for
+    /// switches this request doesn't set (a cap set earlier from the options popover) are kept.
     func apply(to conf: URL) throws -> [String] {
         var changes: [String] = []
-        for (key, value) in assignments where try CXConfig.set(key, to: value, in: conf) {
-            changes.append(value.map { "\(key)=\($0)" } ?? "removed \(key)")
+        for (key, value) in assignments {
+            guard let value else { continue }
+            if try CXConfig.set(key, to: value, in: conf) { changes.append("\(key)=\(value)") }
         }
         return changes
     }

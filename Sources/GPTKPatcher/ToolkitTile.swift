@@ -99,8 +99,9 @@ struct ToolkitTile: View {
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first(where: { ["app", "dmg"].contains($0.pathExtension.lowercased()) }) else { return false }
-            return engine.route(url)
+            var accepted = false
+            for url in urls where engine.route(url) { accepted = true }
+            return accepted
         } isTargeted: { targeted = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: targeted)
         .accessibilityElement(children: .contain)

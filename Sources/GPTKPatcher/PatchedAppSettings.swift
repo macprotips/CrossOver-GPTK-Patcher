@@ -27,6 +27,8 @@ struct PatchedAppSettings: View {
     @State private var error: String?
     @State private var applied = false
     @State private var running: BottleEnv.RunningBottle?
+    /// A process scan is in progress; it runs off the main thread because it spawns ps and lsof.
+    @State private var checking = false
     /// Bottles whose own config sets one of these keys, which beats the app-wide value for that bottle.
     @State private var overrides: [String] = []
     @State private var confirmQuit = false
@@ -151,7 +153,7 @@ struct PatchedAppSettings: View {
                 Button("Apply", action: apply)
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
-                    .disabled(!isDirty)
+                    .disabled(!isDirty || checking || quitting)
             }
             .padding(.top, 20)
         }
@@ -231,26 +233,44 @@ struct PatchedAppSettings: View {
         }
     }
 
-    private func refreshRunning() {
-        if let bottle = scope.bottle {
-            running = BottleEnv.runningBottle(for: bottle)
-        } else {
-            running = BottleEnv.runningBottles().first
+    private nonisolated static func scan(_ bottle: BottleEnv.Bottle?, all: [BottleEnv.Bottle]) -> BottleEnv.RunningBottle? {
+        if let bottle { return BottleEnv.runningBottle(for: bottle) }
+        return all.lazy.compactMap(BottleEnv.runningBottle(for:)).first
+    }
+
+    private func refreshRunning(then completion: @escaping @MainActor () -> Void = {}) {
+        let bottle = scope.bottle
+        let all = bottles
+        checking = true
+        Task {
+            let result = await Task.detached { Self.scan(bottle, all: all) }.value
+            running = result
+            checking = false
+            completion()
         }
     }
 
+    /// Ends the running session(s) in scope, then re-checks; a pending Apply is written only if nothing is left.
     private func quitBottle() {
-        guard let target = running else { return }
+        guard running != nil else { return }
+        let bottle = scope.bottle
+        let all = bottles
         quitting = true
-        Task.detached {
-            let failure: String? = (try? BottleEnv.quit(target)) == nil ? "Couldn't quit the bottle." : nil
-            await MainActor.run {
-                quitting = false
-                if let failure { error = failure } else { error = nil }
-                refreshRunning()
-                let pending = applyAfterQuit
-                applyAfterQuit = false
-                if pending, failure == nil { write() }
+        Task {
+            let left = await Task.detached { () -> BottleEnv.RunningBottle? in
+                let targets = bottle.map { [BottleEnv.runningBottle(for: $0)].compactMap { $0 } } ?? BottleEnv.runningBottles()
+                for target in targets { try? BottleEnv.quit(target) }
+                return Self.scan(bottle, all: all)
+            }.value
+            quitting = false
+            running = left
+            let pending = applyAfterQuit
+            applyAfterQuit = false
+            if left != nil {
+                error = "Some programs in the bottle couldn't be quit."
+            } else {
+                error = nil
+                if pending { write() }
             }
         }
     }
@@ -275,12 +295,9 @@ struct PatchedAppSettings: View {
     }
 
     private func apply() {
-        refreshRunning()
-        if running != nil {
-            promptQuitToApply = true
-            return
+        refreshRunning {
+            if running != nil { promptQuitToApply = true } else { write() }
         }
-        write()
     }
 
     private func write() {
@@ -293,7 +310,7 @@ struct PatchedAppSettings: View {
             if scope == .allBottles {
                 // "All bottles" has to mean all bottles: a bottle's own line would silently win otherwise.
                 for bottle in bottles {
-                    for key in ["D3DM_MAX_FPS", "MTL_HUD_ENABLED", "D3DM_MTL4"] {
+                    for key in ["D3DM_MAX_FPS", "MTL_HUD_ENABLED", "D3DM_MTL4"] where CXConfig.value(of: key, in: bottle.conf) != nil {
                         try CXConfig.set(key, to: nil, in: bottle.conf)
                     }
                 }

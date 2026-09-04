@@ -396,8 +396,9 @@ enum DebugHooks {
             engine.importToolkit(from: URL(fileURLWithPath: path))
             if env["GPTKPATCHER_AUTOPATCH"] == "1" {
                 Task { @MainActor in
-                    while !engine.isReady { try? await Task.sleep(for: .milliseconds(100)) }
-                    engine.patch()
+                    let deadline = Date().addingTimeInterval(120)
+                    while !engine.isReady, Date() < deadline { try? await Task.sleep(for: .milliseconds(100)) }
+                    if engine.isReady { engine.patch() }
                 }
             }
         }
@@ -425,7 +426,6 @@ private struct SupportNoticeSheet: View {
                 HStack {
                     Spacer()
                     Button("Quit") { NSApp.terminate(nil) }
-                        .keyboardShortcut(.cancelAction)
                     Button("Continue") { dismiss() }
                         .keyboardShortcut(.defaultAction)
                         .buttonStyle(.borderedProminent)

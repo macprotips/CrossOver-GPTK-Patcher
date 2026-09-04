@@ -1,12 +1,31 @@
 import SwiftUI
 
-/// Receives files dropped on the app icon or opened with the app and routes them to the window.
+/// Receives files dropped on the app icon or opened with the app and routes them to the window,
+/// and keeps a quit from cutting a patch off half-way.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ application: NSApplication, open urls: [URL]) {
         Task { @MainActor in
             for url in urls { PatchEngine.shared.route(url) }
             NSApp.activate(ignoringOtherApps: true)
         }
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    /// Quitting mid-patch would leave CrossOver half-modified. Cancel the job, which puts things
+    /// back, and quit once that has finished.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let engine = PatchEngine.shared
+        guard engine.isRunning else { return .terminateNow }
+        engine.cancel()
+        Task { @MainActor in
+            let deadline = Date().addingTimeInterval(120)
+            while engine.isRunning, Date() < deadline { try? await Task.sleep(for: .milliseconds(100)) }
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
 
@@ -15,11 +34,11 @@ struct GPTKPatcherApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     init() {
-        // Shows a window and takes focus even when launched as a bare executable.
-        NSApplication.shared.setActivationPolicy(.regular)
         if CommandLine.arguments.contains("--cli") {
             HeadlessRunner.runAndExit()
         }
+        // Shows a window and takes focus even when launched as a bare executable.
+        NSApplication.shared.setActivationPolicy(.regular)
     }
 
     var body: some Scene {
@@ -50,14 +69,20 @@ enum HeadlessRunner {
         exit(0)
     }
 
+    private static let usage = "usage: GPTKPatcher --cli <CrossOver.app> <toolkit.dmg | version> [destination.app] [--in-place] [--replace] [--fps N] [--hud] [--no-copy-env] [--bottle NAME]...\n       GPTKPatcher --cli --quit-bottle <name> | --bottle-status <name>\n"
+
+    private static func fail(_ message: String, status: Int32 = 1) -> Never {
+        FileHandle.standardError.write(Data("error: \(message)\n".utf8))
+        exit(status)
+    }
+
     static func runAndExit() -> Never {
         var args = Array(CommandLine.arguments.dropFirst())
         args.removeAll { $0 == "--cli" }
-        if let index = args.firstIndex(of: "--quit-bottle"), index + 1 < args.count {
-            quitBottleAndExit(named: args[index + 1], dryRun: false)
-        }
-        if let index = args.firstIndex(of: "--bottle-status"), index + 1 < args.count {
-            quitBottleAndExit(named: args[index + 1], dryRun: true)
+        if args.contains("--help") || args.contains("-h") { print(usage, terminator: ""); exit(0) }
+        for flag in ["--quit-bottle", "--bottle-status"] where args.contains(flag) {
+            guard let index = args.firstIndex(of: flag), index + 1 < args.count else { fail("\(flag) needs a bottle name", status: 64) }
+            quitBottleAndExit(named: args[index + 1], dryRun: flag == "--bottle-status")
         }
         var replace = false
         var inPlace = false
@@ -75,22 +100,35 @@ enum HeadlessRunner {
             case "--no-copy-env": storeInCopy = false
             case "--fps":
                 i += 1
-                if i < args.count { fps = Int(args[i]) }
+                guard i < args.count, let value = Int(args[i]), value > 0 else { fail("--fps needs a whole number of frames per second", status: 64) }
+                fps = value
             case "--bottle":
                 i += 1
-                if i < args.count { bottleNames.append(args[i]) }
+                guard i < args.count else { fail("--bottle needs a bottle name", status: 64) }
+                bottleNames.append(args[i])
+            case let flag where flag.hasPrefix("-"): fail("unknown option \(flag)\n\(usage)", status: 64)
             default: positional.append(args[i])
             }
             i += 1
         }
         guard positional.count == (inPlace ? 2 : 3) else {
-            FileHandle.standardError.write(Data("usage: GPTKPatcher --cli <CrossOver.app> <toolkit.dmg | version> [destination.app] [--in-place] [--replace] [--fps N] [--hud] [--no-copy-env] [--bottle NAME]...\n".utf8))
+            FileHandle.standardError.write(Data(usage.utf8))
             exit(64)
         }
+        if !inPlace, !positional[2].lowercased().hasSuffix(".app") { fail("the destination must end in .app", status: 64) }
         do {
             let crossOver = try CrossOverBundle(url: URL(fileURLWithPath: positional[0]))
+            if inPlace {
+                let name = crossOver.url.lastPathComponent
+                let open = NSRunningApplication.runningApplications(withBundleIdentifier: crossOver.identifier).contains {
+                    guard let url = $0.bundleURL else { return false }
+                    return url.standardizedFileURL == crossOver.url.standardizedFileURL
+                        || (url.path.contains("/AppTranslocation/") && url.lastPathComponent == name)
+                }
+                if open { fail("\(name) is running. Quit it before patching it in place.") }
+            }
             if crossOver.needsFirstLaunch {
-                print("note: \(crossOver.url.lastPathComponent) has never been opened; macOS may report the patched app as damaged. Open it once first, or patch from the app, which does that for you.")
+                print("note: \(crossOver.url.lastPathComponent) has never been opened. It will be opened once so macOS can verify it; click Open if asked.")
             }
             let toolkitArg = positional[1]
             let toolkit: Toolkit

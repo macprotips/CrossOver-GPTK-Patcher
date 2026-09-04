@@ -56,8 +56,8 @@ final class PatchEngine {
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications")
     }
 
-    /// Where the copy goes. Remembered between launches; falls back to ~/Applications if the
-    /// remembered folder is gone.
+    /// Where the copy goes. Remembered between launches; falls back to the default folder if the
+    /// remembered one is gone.
     var outputFolder: URL {
         didSet { if persistsOutputFolder { UserDefaults.standard.set(outputFolder.path, forKey: Self.folderKey) } }
     }
@@ -174,9 +174,9 @@ final class PatchEngine {
             let result: Result<Toolkit, Error> = Result { try ToolkitLibrary.importImage(url) { _ in } }
             await MainActor.run {
                 guard self.importingImage == url else { return }
-                self.importingImage = nil
                 switch result {
                 case .success(let toolkit):
+                    self.importingImage = nil
                     self.refreshToolkits()
                     self.selectedToolkit = self.toolkits.first { $0.version == toolkit.version } ?? toolkit
                     self.toolkitStatus = .ok(toolkit.version)
@@ -205,7 +205,13 @@ final class PatchEngine {
         guard let crossOver, let toolkit = selectedToolkit, isReady else { return }
         if mode == .inPlace {
             let running = NSRunningApplication.runningApplications(withBundleIdentifier: crossOver.identifier)
-            if running.contains(where: { $0.bundleURL?.standardizedFileURL == crossOver.url.standardizedFileURL }) {
+            // A never-opened download runs from a hidden translocated copy, whose path differs.
+            let name = crossOver.url.lastPathComponent
+            if running.contains(where: {
+                guard let url = $0.bundleURL else { return false }
+                return url.standardizedFileURL == crossOver.url.standardizedFileURL
+                    || (url.path.contains("/AppTranslocation/") && url.lastPathComponent == name)
+            }) {
                 logLines = ["CrossOver is running from \(crossOver.url.path)."]
                 phase = .failed(Failure(title: "CrossOver is open", message: "Quit CrossOver before patching it in place, then try again."))
                 return

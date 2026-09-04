@@ -12,6 +12,8 @@ struct CrossOverBundle: Sendable {
 
     init(url: URL) throws {
         let fm = FileManager.default
+        // Work on the real bundle: through an alias or symlink, a "copy" would be a link to the original.
+        let url = url.resolvingSymlinksInPath()
         guard url.pathExtension == "app", fm.isDirectory(url) else {
             throw PatchError.notCrossOver("expected an .app bundle")
         }
@@ -55,7 +57,7 @@ struct CrossOverBundle: Sendable {
     /// App-wide config. Its `[EnvironmentVariables]` are applied to every bottle this app launches.
     var globalConfig: URL { sharedSupport.appendingPathComponent("etc/CrossOver.conf") }
 
-    /// CrossOver 25/26 keep GPTK in `lib64/apple_gptk`; older builds used `lib/apple_gptk`.
+    /// CrossOver 25/26 keep GPTK in `lib64/apple_gptk`; CrossOver Preview 27 uses `lib/apple_gptk`.
     func gptkDirectory() throws -> URL {
         let fm = FileManager.default
         for parent in ["lib64", "lib"] {

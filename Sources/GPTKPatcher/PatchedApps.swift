@@ -17,6 +17,8 @@ struct PatchedApp: Identifiable, Hashable, Sendable {
 /// Remembers patched apps between launches and also discovers them in the usual app folders.
 enum PatchedAppRegistry {
     private static let key = "patchedApps"
+    /// Apps removed from the list by the user; discovery would otherwise bring them straight back.
+    private static let hiddenKey = "hiddenPatchedApps"
     static let receiptPath = "Contents/SharedSupport/CrossOver/gptkpatcher-receipt.json"
 
     static func remember(_ url: URL) {
@@ -25,12 +27,19 @@ enum PatchedAppRegistry {
         paths.removeAll { $0 == path }
         paths.insert(path, at: 0)
         UserDefaults.standard.set(paths, forKey: key)
+        var hidden = UserDefaults.standard.stringArray(forKey: hiddenKey) ?? []
+        hidden.removeAll { $0 == path }
+        UserDefaults.standard.set(hidden, forKey: hiddenKey)
     }
 
     static func forget(_ url: URL) {
+        let path = url.standardizedFileURL.path
         var paths = UserDefaults.standard.stringArray(forKey: key) ?? []
-        paths.removeAll { $0 == url.standardizedFileURL.path }
+        paths.removeAll { $0 == path }
         UserDefaults.standard.set(paths, forKey: key)
+        var hidden = UserDefaults.standard.stringArray(forKey: hiddenKey) ?? []
+        if !hidden.contains(path) { hidden.append(path) }
+        UserDefaults.standard.set(hidden, forKey: hiddenKey)
     }
 
     static func load() -> [PatchedApp] {
@@ -43,17 +52,22 @@ enum PatchedAppRegistry {
                 candidates.append(folder.appendingPathComponent(name))
             }
         }
+        let hidden = Set(UserDefaults.standard.stringArray(forKey: hiddenKey) ?? [])
         var seen = Set<String>()
         var apps: [PatchedApp] = []
+        var unavailable: [String] = []
         for url in candidates {
             let path = url.standardizedFileURL.path
-            guard !seen.contains(path) else { continue }
+            guard !seen.contains(path), !hidden.contains(path) else { continue }
             seen.insert(path)
-            guard let app = read(url) else { continue }
-            apps.append(app)
+            if let app = read(url) {
+                apps.append(app)
+            } else if !fm.fileExists(atPath: url.deletingLastPathComponent().path) {
+                unavailable.append(path)   // its volume isn't mounted; keep remembering it
+            }
         }
-        // Drop remembered entries that no longer exist.
-        UserDefaults.standard.set(apps.map(\.url.path), forKey: key)
+        // Forget entries that are gone for good, keep the ones that are merely unreachable.
+        UserDefaults.standard.set(apps.map(\.url.path) + unavailable, forKey: key)
         return apps
     }
 

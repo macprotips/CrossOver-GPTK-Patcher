@@ -50,12 +50,14 @@ enum Shell {
         try process.run()
         token?.track(process)
         defer { token?.track(nil) }
+        if token?.isCancelled == true { process.terminate() }   // cancelled between run and track
 
-        var errData = Data()
+        // stderr is drained on another thread so a chatty command can't fill one pipe and stall.
+        let errBox = DataBox()
         let group = DispatchGroup()
         group.enter()
         DispatchQueue.global(qos: .userInitiated).async {
-            errData = err.fileHandleForReading.readDataToEndOfFile()
+            errBox.data = err.fileHandleForReading.readDataToEndOfFile()
             group.leave()
         }
         let outData = out.fileHandleForReading.readDataToEndOfFile()
@@ -64,7 +66,7 @@ enum Shell {
         return CommandResult(
             status: process.terminationStatus,
             stdout: String(decoding: outData, as: UTF8.self),
-            stderr: String(decoding: errData, as: UTF8.self)
+            stderr: String(decoding: errBox.data, as: UTF8.self)
         )
     }
 
@@ -107,4 +109,8 @@ extension FileManager {
         var isDir: ObjCBool = false
         return fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
     }
+}
+
+private final class DataBox: @unchecked Sendable {
+    var data = Data()
 }

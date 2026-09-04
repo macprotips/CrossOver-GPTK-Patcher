@@ -31,6 +31,7 @@ enum ToolkitLibrary {
         let fm = FileManager.default
         guard let names = try? fm.contentsOfDirectory(atPath: directory.path) else { return [] }
         let toolkits: [Toolkit] = names.compactMap { name in
+            guard !name.hasPrefix(".") else { return nil }   // an import in progress, or one that never finished
             let lib = directory.appendingPathComponent(name, isDirectory: true)
             guard GPTKSource.isValidLib(lib) else { return nil }
             let manifest = readManifest(in: lib)

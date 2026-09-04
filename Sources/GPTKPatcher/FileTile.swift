@@ -40,9 +40,9 @@ struct FileTile: View {
         .overlay(alignment: .topTrailing) { badge.padding(10) }
         .onHover { hovering = $0 }
         .dropDestination(for: URL.self) { urls, _ in
-            guard let url = urls.first(where: { ["app", "dmg"].contains($0.pathExtension.lowercased()) }) else { return false }
-            onPick(url)
-            return true
+            let accepted = urls.filter { ["app", "dmg"].contains($0.pathExtension.lowercased()) }
+            for url in accepted { onPick(url) }
+            return !accepted.isEmpty
         } isTargeted: { targeted = $0 }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: targeted)
         .accessibilityElement(children: .ignore)
