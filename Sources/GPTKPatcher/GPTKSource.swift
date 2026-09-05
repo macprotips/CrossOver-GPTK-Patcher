@@ -6,6 +6,8 @@ struct GPTKPayload: Sendable {
     let lib: URL
     let version: String
     let minimumOS: String?
+    /// Top level of the image the payload came from; Apple's licence and read-me sit there.
+    let documentsRoot: URL?
     let mounts: [DiskImage]
 
     func detachAll(log: (String) -> Void) {
@@ -30,7 +32,8 @@ enum GPTKSource {
                     let (version, minOS) = D3DMetalInfo.read(inLib: lib)
                     let resolved = version ?? versionFromFilename(dmg.lastPathComponent) ?? "unknown"
                     log("Found GPTK payload at \(lib.path) (D3DMetal \(resolved))")
-                    return GPTKPayload(lib: lib, version: resolved, minimumOS: minOS, mounts: mounts)
+                    return GPTKPayload(lib: lib, version: resolved, minimumOS: minOS,
+                                       documentsRoot: mount.mountPoint, mounts: mounts)
                 }
                 let nested = findFiles(withExtension: "dmg", under: mount.mountPoint, maxDepth: 2)
                 if !nested.isEmpty {

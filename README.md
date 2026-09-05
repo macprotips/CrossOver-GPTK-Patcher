@@ -1,7 +1,8 @@
 # CrossOver GPTK Patcher
 
-A small macOS utility that puts Apple's Game Porting Toolkit (GPTK) into CrossOver, either as a
-patched duplicate or by patching the installed app, and sets up DLSS → MetalFX.
+CrossOver already ships with a build of Apple's Game Porting Toolkit. This utility replaces that
+build with a different one — usually newer than the version CodeWeavers shipped — either in a
+duplicate of CrossOver or in the installed app, and sets up DLSS → MetalFX while it is there.
 
 ## Requirements
 
@@ -107,6 +108,17 @@ lists what is running in a bottle without touching it; `--quit-bottle <name>` en
 Environment variables `GPTKPATCHER_CROSSOVER`, `GPTKPATCHER_DMG`, `GPTKPATCHER_OUTPUT`,
 `GPTKPATCHER_PASTE`, `GPTKPATCHER_AUTOPATCH`, `GPTKPATCHER_OPEN_SETTINGS` and
 `GPTKPATCHER_SKIP_NOTICE` pre-fill or drive the window for screenshots; they are never persisted.
+
+## Licensing
+
+This project is MIT licensed; see [LICENSE](LICENSE). That covers the patcher's own code only.
+
+Apple's Game Porting Toolkit is not included or redistributed here. You download it from Apple
+and it stays under Apple's own terms. When a toolkit is imported, the licence, acknowledgements
+and read-me that ship on the disk image are kept beside the copied files in
+`~/Library/Application Support/GPTKPatcher/Toolkits/<version>/Apple Toolkit Documents/`, so the
+terms stay with the toolkit they cover. CrossOver is CodeWeavers' commercial software; this tool
+modifies a copy you already own and does not distribute any part of it.
 
 ## Support
 

@@ -58,7 +58,9 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("CrossOver GPTK Patcher")
                 .font(.title2.weight(.semibold))
-            Text(engine.mode == .copy ? "Create a patched copy of CrossOver with GPTK." : "Patch your existing CrossOver with GPTK.")
+            Text(engine.mode == .copy
+                 ? "Update the Game Porting Toolkit in a copy of CrossOver."
+                 : "Update the Game Porting Toolkit in your CrossOver.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -448,7 +450,7 @@ private struct SupportNoticeSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Before You Begin")
                     .font(.title3.weight(.semibold))
-                Text("Patching CrossOver with Apple's Game Porting Toolkit is not supported by CodeWeavers. A patched CrossOver, whether it is a copy or your installed app, falls outside their support terms.")
+                Text("Replacing the Game Porting Toolkit that CrossOver ships with is not supported by CodeWeavers. A patched CrossOver, whether it is a copy or your installed app, falls outside their support terms.")
                     .font(.body)
                 Text("If you run into a problem, reproduce it with an unmodified CrossOver before contacting CodeWeavers support.")
                     .font(.body)

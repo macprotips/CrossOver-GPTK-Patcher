@@ -75,6 +75,7 @@ enum ToolkitLibrary {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
             try encoder.encode(manifest).write(to: staging.appendingPathComponent("toolkit.json"))
+            copyAppleDocuments(from: payload.documentsRoot, into: staging, log: log)
             if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
             try fm.moveItem(at: staging, to: target)
         } catch {
@@ -83,6 +84,30 @@ enum ToolkitLibrary {
         }
         log("Added GPTK \(payload.version) to the library at \(target.path)")
         return Toolkit(version: payload.version, lib: target, importedAt: Date(), minimumOS: payload.minimumOS, sourceName: dmg.lastPathComponent)
+    }
+
+    /// Apple ships a licence, acknowledgements and read-me beside the redistributable files.
+    /// They are kept with the imported copy so the terms travel with the toolkit.
+    static let documentsFolder = "Apple Toolkit Documents"
+
+    private static func copyAppleDocuments(from root: URL?, into staging: URL, log: (String) -> Void) {
+        let fm = FileManager.default
+        guard let root,
+              let names = try? fm.contentsOfDirectory(atPath: root.path) else { return }
+        let wanted = names.filter { name in
+            !name.hasPrefix(".") && ["rtf", "txt", "pdf"].contains((name as NSString).pathExtension.lowercased())
+        }
+        guard !wanted.isEmpty else { return }
+        let folder = staging.appendingPathComponent(documentsFolder, isDirectory: true)
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            for name in wanted.sorted() {
+                try fm.copyItem(at: root.appendingPathComponent(name), to: folder.appendingPathComponent(name))
+            }
+            log("Kept Apple's \(wanted.sorted().joined(separator: ", ")) with the toolkit")
+        } catch {
+            log("Note: could not copy Apple's toolkit documents (\(error.localizedDescription))")
+        }
     }
 
     static func remove(_ toolkit: Toolkit) throws {

@@ -191,6 +191,7 @@ struct PatchJob {
         log("Copying GPTK \(toolkit.version) files from the library…")
         try Shell.check("/bin/cp", ["-Rp", toolkit.lib.path + "/.", gptkDir.path], token: token)
         try? fm.removeItem(at: gptkDir.appendingPathComponent("toolkit.json"))
+        try? fm.removeItem(at: gptkDir.appendingPathComponent(ToolkitLibrary.documentsFolder))
         try Shell.check("/bin/chmod", ["-R", "u+w", gptkDir.path], token: token)
         let stripped = Quarantine.strip(under: gptkDir)
         if stripped > 0 { log("Removed the quarantine flag from \(stripped) copied item(s)") }
